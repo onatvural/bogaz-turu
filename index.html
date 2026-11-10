@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Boğaz Turu — İstanbul Kart Yarışı</title>
+  <meta name="description" content="Simitçi, vapur kaptanı, sokak kedisi ve martıyla İstanbul'da kart yarışı. Kapalıçarşı'dan geç, Boğaz Köprüsü'nü aş, çay iç turbo yap.">
+  <meta name="theme-color" content="#0f6f80">
+  <meta property="og:title" content="Boğaz Turu — İstanbul Kart Yarışı">
+  <meta property="og:description" content="Kapalıçarşı'dan geç, Boğaz Köprüsü'nü aş, çay iç turbo yap.">
+  <meta property="og:image" content="/assets/img/keyart.jpg">
+  <link rel="icon" href="/assets/img/i_simit.webp">
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <!-- yarış göstergesi -->
+  <div id="hud">
+    <div class="hud-tl">
+      <div id="place"><span id="place-n">1</span><i>.</i></div>
+      <div id="lap">TUR <b id="lap-n">1</b>/3</div>
+    </div>
+    <div class="hud-tc">
+      <div id="itemslot"><img id="item-img" alt=""></div>
+      <div id="item-name"></div>
+    </div>
+    <div class="hud-tr">
+      <div id="time">0:00.00</div>
+      <canvas id="minimap" width="220" height="220"></canvas>
+    </div>
+    <div id="rank"></div>
+    <div class="hud-bl">
+      <div id="speed"><b id="speed-n">0</b><span>km/s</span></div>
+      <div id="speed-bar"><div id="speed-fill"></div></div>
+    </div>
+    <div id="msg"></div>
+    <div id="warn"></div>
+    <button id="btn-pause" aria-label="Duraklat">II</button>
+    <div id="touch">
+      <div class="t-left">
+        <button data-t="left" aria-label="Sol">◀</button>
+        <button data-t="right" aria-label="Sağ">▶</button>
+      </div>
+      <div class="t-right">
+        <button data-t="brake" class="small">FREN</button>
+        <button data-t="item" class="mid">EŞYA</button>
+        <button data-t="drift" class="big">DRIFT</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- açılış -->
+  <section id="s-title" class="screen on">
+    <div class="title-art"></div>
+    <img class="logo" src="/assets/img/logo.webp" alt="Boğaz Turu">
+    <p class="subtitle">İstanbul Kart Yarışı</p>
+    <div class="title-bottom">
+      <div id="loader"><div id="loader-fill"></div><span id="loader-txt">Çaylar demleniyor…</span></div>
+      <button id="btn-start" class="btn big" hidden>BAŞLA</button>
+    </div>
+    <p class="credits">three.js · görseller ve 3B modeller Higgsfield · ses ve müzik ElevenLabs</p>
+  </section>
+
+  <!-- yarışçı seçimi -->
+  <section id="s-select" class="screen">
+    <h2>YARIŞÇINI SEÇ</h2>
+    <div class="select-wrap">
+      <div id="chars"></div>
+      <div id="detail">
+        <img id="d-kart" alt="">
+        <h3 id="d-name"></h3>
+        <p id="d-tag"></p>
+        <div class="stats">
+          <label>Hız</label><div class="bar"><i id="st-hiz"></i></div>
+          <label>İvme</label><div class="bar"><i id="st-ivme"></i></div>
+          <label>Yol tutuş</label><div class="bar"><i id="st-tutus"></i></div>
+        </div>
+        <div id="diffs"></div>
+        <button id="btn-race" class="btn big">YARIŞ!</button>
+      </div>
+    </div>
+    <p class="keys"><kbd>←</kbd><kbd>→</kbd> yön · <kbd>↑</kbd> gaz · <kbd>↓</kbd> fren · <kbd>BOŞLUK</kbd> drift (bırakınca mini turbo) · <kbd>SHIFT</kbd>/<kbd>E</kbd> eşya · <kbd>ESC</kbd> duraklat · <kbd>M</kbd> ses</p>
+  </section>
+
+  <!-- duraklatma -->
+  <section id="s-pause" class="screen dim">
+    <div class="panel">
+      <h2>MOLA</h2>
+      <p class="hint">Çay soğumadan dön.</p>
+      <button id="btn-resume" class="btn">DEVAM</button>
+      <button id="btn-restart" class="btn alt">YENİDEN BAŞLA</button>
+      <button id="btn-quit" class="btn alt">ANA MENÜ</button>
+    </div>
+  </section>
+
+  <!-- sonuç -->
+  <section id="s-results" class="screen dim">
+    <div class="panel wide">
+      <h2 id="r-title">YARIŞ BİTTİ</h2>
+      <ol id="r-list"></ol>
+      <div class="row">
+        <button id="btn-again" class="btn">TEKRAR YARIŞ</button>
+        <button id="btn-change" class="btn alt">YARIŞÇI DEĞİŞTİR</button>
+      </div>
+    </div>
+  </section>
+
+  <div id="rotate">Telefonu yan çevir 📱↻</div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

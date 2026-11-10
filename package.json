@@ -1,0 +1,20 @@
+{
+  "name": "bogaz-turu",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview --host"
+  },
+  "dependencies": {
+    "@fontsource/baloo-2": "^5.3.0",
+    "@fontsource/nunito": "^5.3.0",
+    "three": "0.162.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.21"
+  },
+  "description": "İstanbul temalı three.js kart yarışı"
+}
