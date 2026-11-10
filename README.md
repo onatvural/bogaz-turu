@@ -2,6 +2,8 @@
 
 İstanbul'da geçen, three.js ile yazılmış bir kart yarışı. Eminönü sahilinden kalk, Kapalıçarşı'nın içinden geç, Galata yokuşunda nostaljik tramvayı solla, Boğaz Köprüsü'nden Anadolu'ya geç, sahil yolundan inip balıkçıların arasından Galata Köprüsü'yle geri dön. Üç tur, altı yarışçı.
 
+**Oyna: https://bogaz-turu.vercel.app**
+
 ![Boğaz Köprüsü](docs/kopru.jpeg)
 
 | Kapalıçarşı | Galata yokuşu |
@@ -54,6 +56,7 @@ Galata yokuşundaki tramvaya arkadan hızla bindirirsen savrulursun; turuncu şe
 npm install
 npm run dev      # http://localhost:5183
 npm run build    # dist/
+vercel deploy --prod   # canlıya al
 ```
 
 three.js `0.162.0` sürümüne sabitlendi; WebGL2'si olmayan eski cihazlarda WebGL1'e düşebilen son sürümlerden. `?q=0` düşük, `?q=1` yüksek ayrıntıyı zorlar.
