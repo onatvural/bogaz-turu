@@ -81,7 +81,7 @@ export class Kart {
     this.lap = 0; this.lat = this.lat0; this.along = 0; this.f = f; this.prog = f - T.N;
     this.drift = { on: false, dir: 0, t: 0, level: 0, armed: false };
     this.boostT = 0; this.spinT = 0; this.spinDur = 1; this.invT = 0; this.shield = false; this.shieldT = 0;
-    this.item = null; this.rouletteT = 0; this.padCd = 0; this.bumpCd = 0;
+    this.item = null; this.rouletteT = 0; this.padCd = 0; this.bumpCd = 0; this.wallT = 9;
     this.finished = false; this.finishTime = 0; this.place = slot + 1; this.wrongWay = 0;
     this.visYaw = 0; this.roll = 0; this.pitch = 0; this.squash = 0;
     this.bubble.visible = false;
@@ -177,8 +177,9 @@ export class Kart {
     const di = this.idx - prevIdx;
     if (di < -T.N / 2) this.lap++;
     else if (di > T.N / 2) this.lap--;
-    // duvar
+    // duvar: çarpınca hız kaybı, sürtündükçe yavaşlama. Direksiyonsuz duvara yaslanarak gitmek kazandırmaz.
     const lim = T.hw[this.idx] - 1.05;
+    this.wallT += dt;
     if (Math.abs(TMP.lat) > lim) {
       const s = Math.sign(TMP.lat), over = Math.abs(TMP.lat) - lim;
       const nx = T.rx[this.idx] * s, nz = T.rz[this.idx] * s;
@@ -187,17 +188,22 @@ export class Kart {
       const dir = Math.sign(this.speed || 1);
       const vn = (vx * nx + vz * nz) * dir;
       if (vn > 0) {
-        vx -= nx * vn * 1.3 * dir; vz -= nz * vn * 1.3 * dir;
+        vx -= nx * vn * 1.15 * dir; vz -= nz * vn * 1.15 * dir;
         this.velYaw = Math.atan2(vx, vz);
-        this.yaw = wrapAngle(this.yaw + wrapAngle(this.velYaw - this.yaw) * 0.55);
-        const loss = Math.min(0.45, vn * 0.6);
-        if (vn > 0.22 && Math.abs(this.speed) > 12 && this.bumpCd <= 0) {
-          this.bumpCd = 0.4; this.squash = 0.6;
-          if (this.isPlayer) { this.game.audio.play('bump', { vol: 0.6 }); this.game.shake = Math.max(this.game.shake, 0.25); }
-          this.game.fx.burst(this.pos, 0xffffff, 6, 5, 0.8);
+        this.yaw = wrapAngle(this.yaw + wrapAngle(this.velYaw - this.yaw) * (1 - Math.exp(-4 * dt)));
+        if (this.wallT > 0.3) {
+          // taze çarpma
+          this.speed *= 1 - Math.min(0.5, vn * 0.75);
+          if (vn > 0.2 && Math.abs(this.speed) > 9 && this.bumpCd <= 0) {
+            this.bumpCd = 0.4; this.squash = 0.6;
+            if (this.isPlayer) { this.game.audio.play('bump', { vol: 0.6 }); this.game.shake = Math.max(this.game.shake, 0.25); }
+            this.game.fx.burst(this.pos, 0xffffff, 6, 5, 0.8);
+          }
+          if (vn > 0.45) { d.on = false; d.armed = false; d.t = 0; d.level = 0; }
         }
-        this.speed *= 1 - loss;
-        if (vn > 0.5) { d.on = false; d.armed = false; d.t = 0; d.level = 0; }
+        this.speed -= this.speed * (0.7 + 2.8 * vn) * dt;
+        if (this.boostT > 0) this.boostT -= dt * 2;
+        this.wallT = 0;
       }
       TMP.lat = s * lim;
     }
