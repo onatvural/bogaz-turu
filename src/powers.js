@@ -89,7 +89,7 @@ export class Powers {
     }
     k.pw = full ? 0 : 0.5; k.pwReady = false;
     this.uses[id] = (this.uses[id] || 0) + 1;
-    g.sfxAt(k.char.voice, k.pos, 0.95);
+    g.sfxAt(k.char.voice, k.pos, k.isPlayer ? 0.95 : 0.6); // rakiplerin nidası daha kısık
     g.fx.burst(k.pos, 0xffd23c, 14, 9, 1.3);
     g.hud.powerUsed(k, POWERS[id].name);
     return true;

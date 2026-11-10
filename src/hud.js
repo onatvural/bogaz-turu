@@ -111,7 +111,7 @@ export class HUD {
   powerUsed(k, name) {
     const p = this.game.player;
     if (k.isPlayer) this.toast(k.char, name + '!', 'Özel güç', true);
-    else if (p && k.pos.distanceTo(p.pos) < 110) this.toast(k.char, name + '!', k.char.name);
+    else if (p && k.pos.distanceTo(p.pos) < 85) this.toast(k.char, name + '!', k.char.name);
   }
 
   // oyuncunun gücü doldu
