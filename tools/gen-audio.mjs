@@ -40,6 +40,13 @@ export const JOBS = [
   sfx('engine', 3, 'Small go-kart engine running at a perfectly steady medium RPM, constant even buzzing hum, no revving, no gear changes', { loop: true, influence: 0.6 }),
   sfx('skid', 2, 'Continuous car tire screech skidding on asphalt, steady and even', { loop: true, influence: 0.6 }),
   sfx('ambience', 12, 'Seaside city ambience: gentle waves lapping against a stone quay, distant seagulls calling, faint harbor bustle', { loop: true }),
+  // araca özel motorlar: her kartın kendi sesi (oyunda devirle birlikte hızlanır)
+  sfx('eng_simitci', 3, 'Old small two-stroke moped engine running at a perfectly steady medium RPM, buzzy rattling putt-putt, constant and even, no revving, no gear changes', { loop: true, influence: 0.6 }),
+  sfx('eng_kaptan', 3, 'Old diesel ferry boat engine running steadily, heavy knocking chug chug chug with a clattering mechanical rattle, constant even rhythm, no revving', { loop: true, influence: 0.6 }),
+  sfx('eng_tekir', 3, 'A very loud continuous cat purr, steady rhythmic rumbling purring like a tiny motor, constant and even, no meowing', { loop: true, influence: 0.6 }),
+  sfx('eng_marti', 3, 'Small single-cylinder wooden fishing boat engine running at a perfectly steady RPM, hollow rhythmic pat-pat-pat popping exhaust, constant and even, no revving', { loop: true, influence: 0.6 }),
+  sfx('eng_cayci', 3, 'Small steam locomotive chuffing rhythmically at a steady fast pace, chuff chuff chuff chuff, constant even rhythm, no whistle', { loop: true, influence: 0.6 }),
+  sfx('eng_dolmuscu', 3, 'Old 1970s car with a rough carbureted V8 engine running at a perfectly steady medium RPM, burbling rumbling exhaust, constant and even, no revving, no gear changes', { loop: true, influence: 0.6 }),
 
   // ---------- Tek seferlik efektler ----------
   sfx('boost', 1.6, 'Short powerful turbo boost whoosh with a rising jet flame burst, arcade racing game'),
@@ -60,6 +67,12 @@ export const JOBS = [
   sfx('ui_click', 0.5, 'Soft wooden user interface button click, very short'),
   sfx('ui_select', 0.9, 'Pleasant confirm sound, short plucked string with a small chime'),
   sfx('hop', 0.5, 'Tiny cartoon spring hop, short boing'),
+  sfx('crash', 0.6, 'Two bumper cars colliding, short metallic clank with a rubbery thud'),
+  sfx('power_ready', 0.9, 'Bright magical power-up ready chime, two quick rising sparkly notes, arcade game'),
+  sfx('dolmus_horn', 1.6, 'Old minibus musical multi-tone air horn playing a short cheerful melody, loud and brassy'),
+  sfx('smoke', 1.3, 'Old car engine backfiring and coughing out a big puff of exhaust smoke, sputtering pop'),
+  sfx('steam', 1.3, 'Boiling kettle steam whistle rising quickly into a powerful hissing jet of steam'),
+  sfx('slam', 0.8, 'Heavy cartoon ground slam landing thud with a short rumbling shockwave'),
 
   // ---------- Seslendirme ----------
   say('v_hosgeldin', 'spiker', 'Boğaz Turu\'na hoş geldiniz!'),

@@ -62,6 +62,14 @@ export const JOBS = [
   J('i_marti', 'An angry cartoon seagull diving downward with wings spread and beak open, speed streaks behind it. ' + ICON, { background: 'transparent' }),
   J('i_duduk', 'A shiny brass ship horn trumpet blasting visible ring-shaped sound waves. ' + ICON, { background: 'transparent' }),
 
+  // ---------- Özel güç simgeleri ----------
+  J('pw_simitci', 'Three golden-brown sesame-covered Turkish simit bread rings flying forward in a fan formation with fiery motion streaks. ' + ICON, { background: 'transparent' }),
+  J('pw_kaptan', 'The bow of a small white passenger ferry boat with a yellow-and-black funnel charging straight at the viewer, splitting a big splashing turquoise wave, speed lines. ' + ICON, { background: 'transparent' }),
+  J('pw_tekir', 'An orange tabby cat paw with pink toe beans and claws out, pouncing upward along a bouncy curved motion arc with sparkles. ' + ICON, { background: 'transparent' }),
+  J('pw_marti', 'A cheeky white seagull with grey wings flying away fast with a stolen golden sesame simit ring in its yellow beak, mischievous eyes, motion streaks. ' + ICON, { background: 'transparent' }),
+  J('pw_cayci', 'A shiny brass double-stacked Turkish teapot blasting off like a rocket with big orange flames and white steam shooting out behind it. ' + ICON, { background: 'transparent' }),
+  J('pw_dolmuscu', 'A chrome car exhaust pipe blowing out a big puffy dark grey cartoon smoke cloud. ' + ICON, { background: 'transparent' }),
+
   // ---------- Dokular ----------
   J('t_iznik', 'Seamless tileable texture, flat top-down orthographic view filling the whole frame: classic Iznik ceramic tile pattern, repeating square tiles with cobalt blue, turquoise and tomato red tulips, carnations and leaves on a glossy white ground, thin grout lines. Stylized hand-painted game texture, even flat lighting, no perspective, no shadows, no text.'),
   J('t_kilim', 'Seamless tileable texture, flat top-down orthographic view filling the whole frame: Turkish kilim carpet pattern with bold geometric diamonds and zigzags in deep red, burgundy, navy, mustard and cream. Stylized hand-painted game texture, even flat lighting, no perspective, no shadows, no fringe, no text.'),

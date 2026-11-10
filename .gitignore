@@ -4,3 +4,5 @@ dist
 # ham üretim çıktıları (büyük); işlenmiş halleri public/assets altında
 raw
 .DS_Store
+# yerel araç dosyaları
+.claude

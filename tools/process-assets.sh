@@ -21,6 +21,10 @@ if [[ $what == *img* ]]; then
   for i in cay simit karpuz nazar marti duduk; do
     convert $R/i_$i.png -trim +repage -resize 240x240 -background none -gravity center -extent 256x256 -quality 90 $A/img/i_$i.webp
   done
+  # özel güç simgeleri
+  for c in simitci kaptan tekir marti cayci dolmuscu; do
+    [[ -f $R/pw_$c.png ]] && convert $R/pw_$c.png -trim +repage -resize 240x240 -background none -gravity center -extent 256x256 -quality 90 $A/img/pw_$c.webp
+  done
 
   for t in iznik kilim cobble vault; do
     convert $R/t_$t.png -resize 512x512! -quality 88 $A/tex/$t.jpg
@@ -67,6 +71,8 @@ if [[ $what == *audio* ]]; then
   for l in engine skid ambience; do
     ffmpeg -v error -y -f s16le -ar 44100 -ac 2 -i raw/audio/$l.pcm -ac 1 -ar 22050 $A/audio/$l.wav
   done
+  # araca özel motor döngüleri: bas, küçük hoparlörde duyulsun diye orta banda taşınır (döngü dikişi korunur)
+  python3 tools/engine-loops.py
 fi
 
 if [[ $what == *models* ]]; then

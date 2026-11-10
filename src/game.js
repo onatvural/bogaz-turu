@@ -1,4 +1,4 @@
-// Oyun: sahne kurulumu, yarış akışı, kamera, sıralama, çarpışmalar.
+// Oyun: sahne kurulumu, yarış akışı, kamera, sıralama, çarpışma geri bildirimi.
 import * as THREE from 'three';
 import { buildTrack } from './track.js';
 import { buildWorld } from './world.js';
@@ -6,6 +6,8 @@ import { loadAssets } from './assets.js';
 import { Kart, wrapAngle } from './kart.js';
 import { makeAI, aiControl } from './ai.js';
 import { Items } from './items.js';
+import { Powers } from './powers.js';
+import { solve, shove, overlapNow, pairsNow, stats as solveStats } from './physics.js';
 import { FX } from './fx.js';
 import { HUD } from './hud.js';
 import { CHARACTERS, DIFFICULTY, TOTAL_LAPS } from './config.js';
@@ -13,7 +15,6 @@ import { CHARACTERS, DIFFICULTY, TOTAL_LAPS } from './config.js';
 const STEP = 1 / 60;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const V = new THREE.Vector3(), V2 = new THREE.Vector3();
-const NOINP = { steer: 0, throttle: 0, brake: 0, drift: false, item: false };
 const SPARK = [0xd8d8d8, 0x35e0d0, 0xffd23c, 0xff4f7a];
 
 export class Game {
@@ -28,8 +29,9 @@ export class Game {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(66, 1, 0.3, 6000);
     this.camYaw = 0; this.shake = 0; this.state = 'boot'; this.time = 0; this.acc = 0; this.raceTime = 0;
-    this.karts = []; this.paused = false; this.debugAuto = false;
+    this.karts = []; this.paused = false; this.debugAuto = false; this.revving = false;
     this.onFinish = null; this.onState = null;
+    this.onBump = (a, b, vr, nx, nz) => this.bump(a, b, vr, nx, nz);
     addEventListener('resize', () => this.resize());
     this.resize();
   }
@@ -47,6 +49,7 @@ export class Game {
     this.world = buildWorld(this.scene, this.T, this.quality);
     this.fx = new FX(this.scene);
     this.items = new Items(this);
+    this.powers = new Powers(this);
     this.hud = new HUD(this);
     // menü arkasında dönen tanıtım kamerası
     this.state = 'attract';
@@ -57,7 +60,8 @@ export class Game {
   // ---------- yarış kurulumu ----------
   startRace(charId, diffKey) {
     for (const k of this.karts) this.scene.remove(k.root);
-    this.diff = DIFFICULTY[diffKey] || DIFFICULTY.normal;
+    this.diffKey = DIFFICULTY[diffKey] ? diffKey : 'normal';
+    this.diff = DIFFICULTY[this.diffKey];
     const me = CHARACTERS.find((c) => c.id === charId) || CHARACTERS[0];
     const others = CHARACTERS.filter((c) => c !== me).sort(() => Math.random() - 0.5);
     this.karts = [];
@@ -67,18 +71,23 @@ export class Game {
     this.player.reset(others.length);
     this.karts.push(this.player);
     this.items.reset();
+    this.powers.reset();
     this.hud.buildRank(this.karts);
-    this.hud.last = {};
-    this.raceTime = 0; this.stateT = 0; this.shake = 0; this.finishShown = false; this.lastLap = 0;
+    this.hud.setPlayer(this.player);
+    this.raceTime = 0; this.stateT = 0; this.shake = 0; this.finishShown = false; this.lastLap = 0; this.revving = false;
+    this.throttled = false; // oyuncu gaza bastı mı (basana dek tuş rehberi açık kalır)
     this.camYaw = this.player.yaw;
     this.state = 'intro';
     this.paused = false;
     this.hud.show(true);
     this.setLights(0);
     this.audio.music(null);
-    this.engine?.stop(); this.skid?.stop();
-    this.engine = this.audio.loop('engine', 0); this.skid = this.audio.loop('skid', 0);
+    this.skid?.stop();
+    this.audio.engines(this.karts, this.player);
+    this.skid = this.audio.loop('skid', 0);
     if (!this.amb) this.amb = this.audio.loop('ambience', 0.16);
+    const tr = this.world.tram;
+    tr.external = false; tr.karts = null;
     this.rank();
     this.onState?.('intro');
   }
@@ -91,10 +100,14 @@ export class Game {
   stopRace() {
     this.state = 'attract';
     this.hud.show(false);
-    this.engine?.stop(); this.skid?.stop(); this.engine = this.skid = null;
+    this.audio.stopEngines();
+    this.skid?.stop(); this.skid = null;
     for (const k of this.karts) this.scene.remove(k.root);
     this.karts = [];
     this.items.reset();
+    this.powers.reset();
+    const tr = this.world.tram;
+    tr.external = false; tr.karts = null;
   }
 
   sfxAt(name, pos, vol = 1) {
@@ -118,16 +131,37 @@ export class Game {
       this.time += dt;
       this.world.update(dt, this.time, this.camera);
       this.fx.update(dt);
+      this.updateAudio();
     }
     if (!this.freeCam) this.updateCamera(dt);
     if (this.player && this.state !== 'attract') this.hud.update(dt);
-    this.renderer.render(this.scene, this.camera);
+    if (!this.noDraw) this.renderer.render(this.scene, this.camera); // noDraw: başsız testler kare çizmeden ilerler
   }
 
   // testler için: çizim yapmadan benzetimi ilerlet
   simulate(seconds) {
     const n = Math.round(seconds / STEP);
     for (let i = 0; i < n; i++) { this.step(STEP); this.world.update(STEP, (this.time += STEP), this.camera); this.updateCamera(STEP); this.fx.update(STEP); }
+    this.updateAudio();
+    if (this.player && this.state !== 'attract') this.hud.update(STEP);
+  }
+
+  // testler için: şu anki en derin örtüşmeler (hepsi ≤ 0 olmalı)
+  debugOverlap() { return overlapNow(this.karts, this.world.tram, this.T); }
+  get solveStats() { return solveStats; }
+  debugPairs() { return pairsNow(this.karts); }
+
+  // hata ayıklama: çarpışma kutularını çiz (yarış başladıktan sonra çağrılır)
+  debugBoxes() {
+    const mat = new THREE.LineBasicMaterial({ color: 0xff00ff, depthTest: false });
+    const loop = (hw, hl) => {
+      const l = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([[-hw, -hl], [hw, -hl], [hw, hl], [-hw, hl]].map(([x, z]) => new THREE.Vector3(x, 0.2, z))), mat);
+      l.renderOrder = 9;
+      return l;
+    };
+    for (const k of this.karts) if (!k._box) k.root.add((k._box = loop(k.hw, k.hl)));
+    const tr = this.world.tram;
+    if (!tr._box) tr.obj.add((tr._box = loop(tr.hw, tr.hl)));
   }
 
   step(dt) {
@@ -137,7 +171,7 @@ export class Game {
     const inp = this.input.poll();
 
     if (this.state === 'intro') {
-      for (const k of this.karts) k.syncVisual(dt, 0);
+      for (const k of this.karts) k.syncVisual(dt);
       if (this.stateT > 3.4) { this.state = 'countdown'; this.stateT = 0; this.cdN = -1; this.pressAt = -9; this.wasThrottle = false; }
       return;
     }
@@ -151,10 +185,10 @@ export class Game {
       }
       if (inp.throttle && !this.wasThrottle) this.pressAt = this.stateT;
       this.wasThrottle = !!inp.throttle;
-      for (const k of this.karts) k.syncVisual(dt, 0);
-      if (this.engine) this.engine.set(0.2 + (inp.throttle ? 0.12 : 0), 0.6 + (inp.throttle ? 0.5 + Math.sin(this.time * 30) * 0.05 : 0));
+      this.revving = !!inp.throttle;
+      for (const k of this.karts) k.syncVisual(dt);
       if (this.stateT >= 3) {
-        this.state = 'race'; this.stateT = 0; this.raceTime = 0;
+        this.state = 'race'; this.stateT = 0; this.raceTime = 0; this.revving = false;
         this.hud.message('BAS GAZA!', 1.3, 'go');
         this.audio.play('v_basla', { vol: 1 });
         this.audio.music('music_race');
@@ -169,37 +203,47 @@ export class Game {
 
     // ---- yarış / bitiş ----
     this.raceTime += dt;
-    const T = this.T;
+    const T = this.T, tr = this.world.tram;
+    tr.external = true; tr.karts = this.karts;
+    // 1) herkes sürer ve hareket eder
     for (const k of this.karts) {
       let ci;
       if (k.ai) {
         const gap = (p.prog - k.prog) * T.sp; // + ise oyuncunun gerisinde
         k.aiMul = this.diff.ai * k.ai.skill * (1 + this.diff.band * clamp(gap / 70, -1, 1.3));
+        // kopan lider ağırlaşır, kopan sonuncu toparlanır: paket bir arada kalsın, temas ve güçler oyunda olsun
+        const ord = this.order, last = ord.length - 1;
+        if (k.place === 1 && ord[1]) k.aiMul *= 1 - 0.06 * clamp(((k.prog - ord[1].prog) * T.sp - 20) / 60, 0, 1);
+        else if (k.place === last + 1 && last > 0) k.aiMul *= 1 + 0.04 * clamp(((ord[last - 1].prog - k.prog) * T.sp - 20) / 60, 0, 1);
         ci = aiControl(k, this, dt);
       } else if (this.debugAuto) {
         k.ai = k._auto || (k._auto = makeAI(99)); ci = aiControl(k, this, dt); k.ai = null;
       } else ci = inp;
-      const lapBefore = k.lap;
+      if (k.isPlayer && (ci.throttle || this.debugAuto)) this.throttled = true;
+      k.lap0 = k.lap;
+      this.powers.charge(k, dt);
       k.update(dt, ci);
       if (ci.item) this.items.use(k);
-      if (k.lap > lapBefore) this.onLap(k);
+      if (ci.power) this.powers.use(k);
+    }
+    // 2) tramvay ilerler, sonra bütün gövdeler birbirinden ayrılır
+    tr.step(dt);
+    solve(this.karts, tr, this.onBump, T);
+    // 3) pistteki yer, tur, görsel
+    for (const k of this.karts) {
+      k.settle(dt);
+      if (k.lap > k.lap0) this.onLap(k);
       // turbo şeritleri
-      if (k.padCd <= 0) for (const pad of this.world.boostPads) {
+      if (k.padCd <= 0 && !k.flying) for (const pad of this.world.boostPads) {
         if (Math.abs(((k.f - pad.i + T.N * 1.5) % T.N) - T.N / 2) < 2.4 && Math.abs(k.lat - pad.lat) < 2.8) { k.boost(1.15); k.padCd = 1; break; }
       }
       this.kartFx(k, dt);
     }
-    this.collide();
-    this.tram(dt);
+    this.tramBell(dt);
     this.items.update(dt, this.time);
+    this.powers.update(dt, this.time);
     this.rank();
 
-    // oyuncu sesleri
-    if (this.engine) {
-      const r = Math.abs(p.speed) / p.vmaxBase;
-      this.engine.set(0.16 + r * 0.14, 0.55 + r * 1.05 + (p.boostT > 0 ? 0.25 : 0));
-      this.skid.set(p.drift.on ? 0.22 : 0, 0.9 + p.drift.level * 0.12);
-    }
     if (p.wrongWay > 1.2 && !p.finished) this.hud.warn('TERS YÖN!', 0.3);
     this.shake = Math.max(0, this.shake - dt * 1.6);
 
@@ -210,6 +254,17 @@ export class Game {
         this.fx.spawn(V.x, V.y, V.z, (Math.random() - 0.5) * 4, 2, (Math.random() - 0.5) * 4, [0xe23b2e, 0xffd23c, 0x35e0d0, 0xffffff, 0xff7ab8][(Math.random() * 5) | 0], 0.5, 1.6, 9);
       }
     }
+  }
+
+  // Motorlar ve lastik sesi: kare başına bir kez.
+  updateAudio() {
+    const p = this.player, st = this.state;
+    if (!p || st === 'attract' || st === 'boot') return;
+    let rev = -1;
+    if (st === 'intro') rev = 0.04;
+    else if (st === 'countdown') rev = this.revving ? 0.5 + Math.sin(this.time * 30) * 0.06 : 0.06;
+    this.audio.updateEngines(p, this.camYaw, rev, st === 'finished' ? 0.3 : 1);
+    this.skid?.set(st === 'race' && p.drift.on ? 0.22 : 0, 0.9 + p.drift.level * 0.12);
   }
 
   onLap(k) {
@@ -223,7 +278,6 @@ export class Game {
         this.audio.play('finish', { vol: 0.8 });
         this.audio.play('v_bitti', { vol: 1 });
         this.audio.music('music_results');
-        this.engine?.set(0, 1); this.skid?.set(0);
         const voice = k.place === 1 ? 'v_birinci' : k.place <= 3 ? 'v_podyum' : 'v_gec';
         setTimeout(() => this.audio.play(voice, { vol: 1 }), 1500);
         this.onState?.('finished');
@@ -249,45 +303,41 @@ export class Game {
     this.order = s;
   }
 
-  collide() {
-    const ks = this.karts, R = 2.5;
-    for (let i = 0; i < ks.length; i++) for (let j = i + 1; j < ks.length; j++) {
-      const a = ks[i], b = ks[j];
-      const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z;
-      const d2 = dx * dx + dz * dz;
-      if (d2 > R * R || d2 < 1e-6) continue;
-      const d = Math.sqrt(d2), push = (R - d) / 2, nx = dx / d, nz = dz / d;
-      a.pos.x -= nx * push; a.pos.z -= nz * push; b.pos.x += nx * push; b.pos.z += nz * push;
-      const closing = (a.speed * Math.sin(a.velYaw) - b.speed * Math.sin(b.velYaw)) * nx + (a.speed * Math.cos(a.velYaw) - b.speed * Math.cos(b.velYaw)) * nz;
-      if (closing > 4) {
-        a.speed *= 0.96; b.speed *= 0.96;
-        if ((a.isPlayer || b.isPlayer) && a.bumpCd <= 0 && b.bumpCd <= 0) { a.bumpCd = b.bumpCd = 0.5; this.audio.play('bump', { vol: 0.45 }); this.shake = Math.max(this.shake, 0.15); }
+  // Çarpma anı (çözücü çağırır). b yoksa tramvaya çarpılmıştır; (nx, nz) a'dan karşıdakine bakar.
+  bump(a, b, vr, nx, nz) {
+    if (b) {
+      // Tam Yol İleri: Kaptan değdiği kartı savurur
+      const r = a.ramT > 0 ? a : b.ramT > 0 ? b : null;
+      if (r) {
+        const v = r === a ? b : a, s = r === a ? 1 : -1;
+        if (v.hit(1.0)) {
+          shove(v, nx * s * 9, nz * s * 9);
+          if (v.isPlayer) this.hud.warn(`${r.char.name} bindirdi!`, 1.3);
+        }
       }
+    } else {
+      // tramvaya arkadan hızla bindiren savrulur
+      const tr = this.world.tram;
+      if (vr > 16 && nx * tr.fx + nz * tr.fz > 0.7) a.hit(1.0);
     }
+    if (vr < 2.2 || a.bumpCd > 0 || (b && b.bumpCd > 0)) return;
+    a.bumpCd = 0.25; if (b) b.bumpCd = 0.25;
+    const hard = clamp((vr - 2) / 20, 0, 1);
+    // temas noktası: a'nın karşıya bakan yüzü
+    const ra = a.hl * Math.abs(a.fx * nx + a.fz * nz) + a.hw * Math.abs(a.fz * nx - a.fx * nz);
+    V.set(a.pos.x + nx * ra, a.y, a.pos.z + nz * ra);
+    this.sfxAt('crash', V, 0.3 + 0.7 * hard);
+    this.fx.burst(V, 0xffe9a8, 4 + Math.round(hard * 10), 4 + hard * 7, 0.8 + hard * 0.5);
+    const sq = 0.3 + hard * 0.5;
+    a.squash = Math.max(a.squash, sq); if (b) b.squash = Math.max(b.squash, sq);
+    if (a.isPlayer || (b && b.isPlayer)) this.shake = Math.max(this.shake, 0.1 + hard * 0.3);
   }
 
-  tram(dt) {
-    const tr = this.world.tram, T = this.T, p = this.player;
-    for (const k of this.karts) {
-      const df = (((k.f - tr.f + T.N * 1.5) % T.N) - T.N / 2) * T.sp;
-      const dl = k.lat - tr.lat;
-      const ox = tr.halfLen + 1.5 - Math.abs(df), oy = tr.halfWid + 1.15 - Math.abs(dl);
-      if (ox <= 0 || oy <= 0) continue;
-      const i = k.idx;
-      if (oy < ox * 0.7) {
-        const s = Math.sign(dl) || 1;
-        k.pos.x += T.rx[i] * s * oy; k.pos.z += T.rz[i] * s * oy;
-        k.speed *= 0.985;
-      } else if (df < 0) {
-        // arkadan bindirdi
-        k.pos.x -= T.tx[i] * ox; k.pos.z -= T.tz[i] * ox;
-        if (k.speed - tr.speed > 16) k.hit(1.0); else k.speed = Math.min(k.speed, tr.speed * 0.7);
-      } else { k.pos.x += T.tx[i] * ox; k.pos.z += T.tz[i] * ox; k.speed = Math.max(k.speed, tr.speed + 3); }
-      if (k.isPlayer && k.bumpCd <= 0) { k.bumpCd = 0.5; this.audio.play('bump', { vol: 0.6 }); }
-    }
-    // zil
+  // tramvay zili: oyuncu yaklaşınca
+  tramBell(dt) {
+    const tr = this.world.tram, p = this.player;
     this.bellT = (this.bellT || 0) - dt;
-    if (p && this.bellT <= 0) {
+    if (p && tr.solid && this.bellT <= 0) {
       const d = tr.obj.position.distanceTo(p.pos);
       if (d < 70) { this.audio.play('tram_bell', { vol: clamp(1 - d / 70, 0, 1) * 0.6 }); this.bellT = 3.2; }
     }
@@ -295,16 +345,30 @@ export class Game {
 
   kartFx(k, dt) {
     if (k.pos.distanceToSquared(this.camera.position) > 120 * 120) return;
-    const yaw = k.root.rotation.y, sx = Math.sin(yaw), cz = Math.cos(yaw);
-    const bx = k.pos.x - sx * 1.5, bz = k.pos.z - cz * 1.5;
+    const fx = this.fx, sx = k.fx, cz = k.fz;
+    const bx = k.pos.x - sx * (k.hl - 0.4), bz = k.pos.z - cz * (k.hl - 0.4);
     if (k.drift.on) {
       const col = SPARK[k.drift.level];
       for (const s of [-1, 1]) {
-        if (Math.random() < 0.7) this.fx.spawn(bx + cz * s * 1.0, k.y + 0.25, bz - sx * s * 1.0, -sx * 3 + (Math.random() - 0.5) * 4, 2 + Math.random() * 4, -cz * 3 + (Math.random() - 0.5) * 4, col, k.drift.level ? 0.34 : 0.22, 0.3 + Math.random() * 0.2, 14);
+        if (Math.random() < 0.7) fx.spawn(bx + cz * s * k.hw * 0.8, k.y + 0.25, bz - sx * s * k.hw * 0.8, -sx * 3 + (Math.random() - 0.5) * 4, 2 + Math.random() * 4, -cz * 3 + (Math.random() - 0.5) * 4, col, k.drift.level ? 0.34 : 0.22, 0.3 + Math.random() * 0.2, 14);
       }
     }
     if (k.boostT > 0 && Math.random() < 0.8) {
-      this.fx.spawn(bx + (Math.random() - 0.5), k.y + 0.8, bz + (Math.random() - 0.5), -sx * 6, 1 + Math.random() * 2, -cz * 6, Math.random() > 0.5 ? 0xff7a1a : 0xffd23c, 0.5, 0.35, 0);
+      fx.spawn(bx + (Math.random() - 0.5), k.y + 0.8 + k.air, bz + (Math.random() - 0.5), -sx * 6, 1 + Math.random() * 2, -cz * 6, Math.random() > 0.5 ? 0xff7a1a : 0xffd23c, 0.5, 0.35, 0);
+    }
+    if (k.ramT > 0) {
+      // pruva dalgası: burundan iki yana köpük
+      const nx = k.pos.x + sx * k.hl, nz = k.pos.z + cz * k.hl;
+      for (const s of [-1, 1]) {
+        fx.spawn(nx + cz * s * 0.5, k.y + 0.5, nz - sx * s * 0.5, cz * s * (5 + Math.random() * 5) + sx * 4, 3 + Math.random() * 4, -sx * s * (5 + Math.random() * 5) + cz * 4, Math.random() > 0.4 ? 0xeafaff : 0x6fd6e8, 0.45, 0.4 + Math.random() * 0.2, 13);
+      }
+    }
+    if (k.teaT > 0 && Math.random() < 0.75) {
+      // semaver buharı
+      fx.spawn(bx + (Math.random() - 0.5) * 0.8, k.y + 1.9, bz + (Math.random() - 0.5) * 0.8, -sx * 2 + (Math.random() - 0.5) * 2, 3 + Math.random() * 2, -cz * 2 + (Math.random() - 0.5) * 2, 0xffffff, 0.7, 0.55, -3);
+    }
+    if (k.smokeT > 0 && Math.random() < 0.4) {
+      fx.spawn(k.pos.x + (Math.random() - 0.5) * 2.4, k.y + 1.2 + Math.random(), k.pos.z + (Math.random() - 0.5) * 2.4, (Math.random() - 0.5) * 2, 1.5, (Math.random() - 0.5) * 2, 0x3a3a40, 0.9, 0.5, -1);
     }
   }
 
@@ -351,8 +415,8 @@ export class Game {
       if (Math.abs(lat) > lim) { const o = lat - Math.sign(lat) * lim; cx -= T.rx[ci] * o; czz -= T.rz[ci] * o; }
     }
     const sh = this.shake * 0.5;
-    cam.position.set(cx + (Math.random() - 0.5) * sh, Math.max(k.y, T.py[ci]) + 4.7 + (Math.random() - 0.5) * sh, czz + (Math.random() - 0.5) * sh);
-    cam.lookAt(k.pos.x + sx * 5, k.y + 2.1, k.pos.z + cz * 5);
+    cam.position.set(cx + (Math.random() - 0.5) * sh, Math.max(k.y, T.py[ci]) + 4.7 + k.air * 0.25 + (Math.random() - 0.5) * sh, czz + (Math.random() - 0.5) * sh);
+    cam.lookAt(k.pos.x + sx * 5, k.y + 2.1 + k.air * 0.5, k.pos.z + cz * 5);
     const fov = 64 + clamp(Math.abs(k.speed) / k.vmaxBase, 0, 1.3) * 9 + boost * 7;
     cam.fov += (fov - cam.fov) * Math.min(1, dt * 5);
     cam.updateProjectionMatrix();

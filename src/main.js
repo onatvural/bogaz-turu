@@ -6,8 +6,8 @@ import { Game } from './game.js';
 import { AudioMan } from './audio.js';
 import { Input } from './input.js';
 import { BASE } from './assets.js';
-import { CHARACTERS, DIFFICULTY } from './config.js';
-import { fmtTime } from './hud.js';
+import { CHARACTERS, DIFFICULTY, POWERS } from './config.js';
+import { fmtTime, helpHTML } from './hud.js';
 
 const $ = (s) => document.querySelector(s);
 const screens = { title: $('#s-title'), select: $('#s-select'), pause: $('#s-pause'), results: $('#s-results') };
@@ -24,7 +24,8 @@ if (!CHARACTERS.some((c) => c.id === sel)) sel = 'simitci';
 if (!DIFFICULTY[diff]) diff = 'normal';
 
 if (input.isTouch) document.body.classList.add('touch');
-input.bindTouch($('#touch'));
+input.bindTouch($('#hud'));
+input.onHelp = () => { if (game.hud && game.state !== 'attract') game.hud.toggleHelp(); };
 
 // ---------- yükleme ----------
 const prog = [0, 0];
@@ -76,6 +77,9 @@ function pick(id, sound) {
   $('#d-kart').src = `${BASE}img/k_${id}.webp`;
   $('#d-name').textContent = c.name; $('#d-tag').textContent = c.tag;
   $('#st-hiz').style.width = c.hiz * 20 + '%'; $('#st-ivme').style.width = c.ivme * 20 + '%'; $('#st-tutus').style.width = c.tutus * 20 + '%';
+  $('#st-agirlik').style.width = c.agirlik * 20 + '%';
+  $('#d-pw-img').src = `${BASE}img/pw_${id}.webp`;
+  $('#d-pw-name').textContent = POWERS[id].name; $('#d-pw-desc').textContent = POWERS[id].desc;
   if (sound) {
     audio.play('ui_click', { vol: 0.6 });
     try { voiceSrc?.stop(); } catch (e) { /* bitmiş */ }
@@ -96,6 +100,7 @@ $('#btn-race').addEventListener('click', () => { audio.unlock(); audio.play('ui_
 function pause(on) {
   if (!['race', 'countdown', 'intro'].includes(game.state)) return;
   game.paused = on;
+  if (on) $('#pause-keys').innerHTML = helpHTML(input.device);
   show(on ? 'pause' : null);
   audio.suspend(on);
 }

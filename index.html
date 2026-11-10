@@ -18,12 +18,13 @@
 
   <!-- yarış göstergesi -->
   <div id="hud">
+    <div id="smoke"></div>
     <div class="hud-tl">
       <div id="place"><span id="place-n">1</span><i>.</i></div>
       <div id="lap">TUR <b id="lap-n">1</b>/3</div>
     </div>
     <div class="hud-tc">
-      <div id="itemslot"><img id="item-img" alt=""></div>
+      <div id="itemslot"><img id="item-img" alt=""><kbd id="item-key" class="key">SHIFT</kbd></div>
       <div id="item-name"></div>
     </div>
     <div class="hud-tr">
@@ -37,6 +38,15 @@
     </div>
     <div id="msg"></div>
     <div id="warn"></div>
+    <div id="toasts"></div>
+    <!-- özel güç: dolunca parlar; tuşla ya da üstüne basarak kullanılır -->
+    <div id="power" class="pw" data-t="power">
+      <div class="pw-ring"><img alt=""></div>
+      <kbd id="pw-key" class="key">Q</kbd>
+      <span id="pw-name"></span>
+    </div>
+    <!-- tuş rehberi: yarışın başında kısa süre görünür, H ile açılıp kapanır -->
+    <div id="help"></div>
     <button id="btn-pause" aria-label="Duraklat">II</button>
     <div id="touch">
       <div class="t-left">
@@ -44,6 +54,7 @@
         <button data-t="right" aria-label="Sağ">▶</button>
       </div>
       <div class="t-right">
+        <button data-t="power" class="pw mid2"><span class="pw-ring"><img alt=""></span><i>GÜÇ</i></button>
         <button data-t="brake" class="small">FREN</button>
         <button data-t="item" class="mid">EŞYA</button>
         <button data-t="drift" class="big">DRIFT</button>
@@ -76,12 +87,17 @@
           <label>Hız</label><div class="bar"><i id="st-hiz"></i></div>
           <label>İvme</label><div class="bar"><i id="st-ivme"></i></div>
           <label>Yol tutuş</label><div class="bar"><i id="st-tutus"></i></div>
+          <label>Ağırlık</label><div class="bar"><i id="st-agirlik"></i></div>
+        </div>
+        <div id="d-power">
+          <img id="d-pw-img" alt="">
+          <div><small>Özel güç</small><b id="d-pw-name"></b><span id="d-pw-desc"></span></div>
         </div>
         <div id="diffs"></div>
         <button id="btn-race" class="btn big">YARIŞ!</button>
       </div>
     </div>
-    <p class="keys"><kbd>←</kbd><kbd>→</kbd> yön · <kbd>↑</kbd> gaz · <kbd>↓</kbd> fren · <kbd>BOŞLUK</kbd> drift (bırakınca mini turbo) · <kbd>SHIFT</kbd>/<kbd>E</kbd> eşya · <kbd>ESC</kbd> duraklat · <kbd>M</kbd> ses</p>
+    <p class="keys"><kbd>←</kbd><kbd>→</kbd> yön · <kbd>↑</kbd> gaz · <kbd>↓</kbd> fren · <kbd>BOŞLUK</kbd> drift (bırakınca mini turbo) · <kbd>SHIFT</kbd>/<kbd>E</kbd> eşya · <kbd>Q</kbd> özel güç · <kbd>ESC</kbd> duraklat · <kbd>M</kbd> ses</p>
   </section>
 
   <!-- duraklatma -->
@@ -89,6 +105,7 @@
     <div class="panel">
       <h2>MOLA</h2>
       <p class="hint">Çay soğumadan dön.</p>
+      <div id="pause-keys" class="keylist"></div>
       <button id="btn-resume" class="btn">DEVAM</button>
       <button id="btn-restart" class="btn alt">YENİDEN BAŞLA</button>
       <button id="btn-quit" class="btn alt">ANA MENÜ</button>

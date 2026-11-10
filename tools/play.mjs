@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Oyunu başsız Chromium'da açar ve verilen senaryoyu çalıştırır: benzetim ilerletme, ölçüm, ekran görüntüsü.
-// Kullanım: node tools/play.mjs <senaryo.mjs> [--url http://localhost:5183/?q=1] [--w 1280] [--h 720] [--out /tmp/bt]
+// Kullanım: node tools/play.mjs <senaryo.mjs> [--url http://localhost:5183/?q=1] [--w 1280] [--h 720] [--out /tmp/bt] [--mobile 1]
+//   --mobile 1: dokunmatik telefon gibi açar (844x390, kaba işaretçi)
 // Senaryo: export default async ({ page, ev, shot, race, sim, cam, log }) => { ... }
 // Önce `npm run dev` çalışıyor olmalı. Tarayıcı yolu: CHROME_PATH ortam değişkeni ya da bilinen yerler.
 import puppeteer from 'puppeteer-core';
@@ -11,7 +12,8 @@ import { pathToFileURL } from 'node:url';
 const args = process.argv.slice(2);
 const flag = (name, def) => { const i = args.indexOf('--' + name); return i >= 0 ? args.splice(i, 2)[1] : def; };
 const url = flag('url', 'http://localhost:5183/?q=1');
-const W = +flag('w', 1280), H = +flag('h', 720);
+const mobile = flag('mobile', '') === '1';
+const W = +flag('w', mobile ? 844 : 1280), H = +flag('h', mobile ? 390 : 720);
 const out = resolve(flag('out', '/tmp/bt-shots'));
 const file = args[0];
 if (!file) { console.error('senaryo dosyası gerekli'); process.exit(2); }
@@ -27,7 +29,7 @@ for (;;) {
   try { mkdirSync(LOCK); break; } catch (e) {
     let age = 0;
     try { age = Date.now() - statSync(LOCK).mtimeMs; } catch (e2) { continue; }
-    if (age > 6 * 60e3) { rmSync(LOCK, { recursive: true, force: true }); continue; } // bayat kilit
+    if (age > 100e3) { rmSync(LOCK, { recursive: true, force: true }); continue; } // bayat kilit: sahibi 20 sn'de bir tazeler
     if (Date.now() - t0 > 15 * 60e3) { console.error('kilit alınamadı:', LOCK); process.exit(2); }
     await new Promise((r) => setTimeout(r, 1500));
   }
@@ -36,14 +38,14 @@ const unlock = () => { try { rmSync(LOCK, { recursive: true, force: true }); } c
 process.on('exit', unlock);
 process.on('SIGINT', () => process.exit(130));
 process.on('SIGTERM', () => process.exit(143));
-const beat = setInterval(() => { try { utimesSync(LOCK, new Date(), new Date()); } catch (e) { /* yok */ } }, 30e3);
+const beat = setInterval(() => { try { utimesSync(LOCK, new Date(), new Date()); } catch (e) { /* yok */ } }, 20e3);
 beat.unref();
 
 const browser = await puppeteer.launch({
   executablePath: chrome, headless: true,
   args: ['--no-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist',
     '--mute-audio', '--autoplay-policy=no-user-gesture-required', `--window-size=${W},${H}`],
-  defaultViewport: { width: W, height: H },
+  defaultViewport: { width: W, height: H, hasTouch: mobile, isMobile: mobile },
 });
 let failed = false;
 try {
@@ -53,6 +55,8 @@ try {
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') console.log(`[${m.type()}]`, m.text().slice(0, 300)); });
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction('window.__bt && window.__bt.state === "attract"', { timeout: 180000 });
+  // yazılımsal çizim çok yavaş: kareler yalnız ekran görüntüsü alınırken çizilir
+  await page.evaluate(() => { window.__bt.noDraw = true; });
 
   const ev = (fn, ...a) => page.evaluate(fn, ...a);
   const h = {
@@ -74,9 +78,10 @@ try {
     followCam: () => ev(() => { window.__bt.freeCam = false; }),
     shot: async (name) => {
       // bir kare çizilsin
-      await ev(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+      await ev(() => new Promise((r) => { window.__bt.noDraw = false; requestAnimationFrame(() => requestAnimationFrame(r)); }));
       const p = `${out}/${name}.png`;
       await page.screenshot({ path: p });
+      await ev(() => { window.__bt.noDraw = true; });
       console.log('görüntü:', p);
       return p;
     },

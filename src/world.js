@@ -849,18 +849,46 @@ export function buildWorld(scene, T, quality = 1) {
       const u = new THREE.Mesh(new THREE.BoxGeometry(2.7, 1.5, 7.8), lambert({ color: 0xf5ecd7 })); u.position.y = 3.4; tram.add(u);
       const rf = new THREE.Mesh(new THREE.BoxGeometry(3, 0.3, 8.4), lambert({ color: 0x333333 })); rf.position.y = 4.3; tram.add(rf);
     }
-    const tramYaw = 0;
     scene.add(tram);
     const span_ = (g1 - g0 + T.N) % T.N;
-    const TR = (W.tram = { obj: tram, f: g0 + 20, lat: -0.05, speed: 13, halfLen: 4.4, halfWid: 1.7, active: true, yawFix: 0 });
+    const sz = tram.userData.size;
+    // Tramvay katı bir gövdedir (yarı boy hl, yarı en hw). Yarış sırasında oyun adım adım ilerletir (external),
+    // menüde dünya kendi ilerletir. Hat sonunda küçülerek kaybolur, hat başı boşsa orada büyüyerek belirir;
+    // çarpışma kutusu da görünen boyla birlikte küçülür, böylece hiçbir kartın içinde belirmez.
+    const TR = (W.tram = {
+      obj: tram, f: g0 + 20, lat: -0.05, speed: 13, hl: sz ? sz.z / 2 : 4.2, hw: sz ? sz.x / 2 : 1.5,
+      grow: 1, out: false, solid: true, external: false, karts: null, yawFix: 0,
+      x: 0, z: 0, fx: 0, fz: 1, vx: 0, vz: 0, bhl: 0, bhw: 0,
+    });
     const tp = new THREE.Vector3();
-    W.updaters.push((dt) => {
-      TR.f += (TR.speed * dt) / T.sp;
-      if (((TR.f - g0 + T.N) % T.N) > span_ - 6) TR.f = g0 + 6;
+    const START = g0 + 6;
+    TR.step = (dt) => {
+      const adv = (TR.speed * dt) / T.sp;
+      if (TR.out) {
+        TR.grow = Math.max(0, TR.grow - dt * 2.5);
+        if (TR.grow > 0) TR.f += adv;
+        else {
+          // hat başında kart varsa bekle
+          const busy = TR.karts && TR.karts.some((k) => Math.abs(((k.f - START + T.N * 1.5) % T.N) - T.N / 2) * T.sp < TR.hl + 10);
+          if (!busy) { TR.f = START; TR.out = false; }
+        }
+      } else {
+        TR.grow = Math.min(1, TR.grow + dt * 2.5);
+        TR.f += adv;
+        if (((TR.f - g0 + T.N) % T.N) > span_ - 9) TR.out = true;
+      }
+      TR.solid = TR.grow > 0.05;
       T.pointAt(TR.f, TR.lat, tp, 0.05);
       tram.position.copy(tp);
-      const i = T.wrap(Math.floor(TR.f));
-      tram.rotation.y = T.headingAt(i) + tramYaw + TR.yawFix;
-    });
+      const h = T.headingAt(T.wrap(Math.floor(TR.f)));
+      tram.rotation.y = h + TR.yawFix;
+      tram.visible = TR.grow > 0.01;
+      tram.scale.setScalar(Math.max(0.001, TR.grow));
+      TR.x = tp.x; TR.z = tp.z; TR.fx = Math.sin(h); TR.fz = Math.cos(h);
+      TR.vx = TR.fx * TR.speed; TR.vz = TR.fz * TR.speed;
+      TR.bhl = TR.hl * TR.grow; TR.bhw = TR.hw * TR.grow;
+    };
+    TR.step(0);
+    W.updaters.push((dt) => { if (!TR.external) TR.step(dt); });
   }
 }
