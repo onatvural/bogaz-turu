@@ -74,7 +74,9 @@ Kod `src/` altında:
 | Dosya | İçerik |
 | --- | --- |
 | `track.js` | Pist eğrisi, örnekleme, yol/duvar geometrisi |
-| `world.js` | Arazi, deniz, gökyüzü, köprüler, çarşı, binalar, vapur, martı, tramvay |
+| `world.js` | Arazi, deniz, gökyüzü, köprüler, vapur, martı, tramvay |
+| `city.js`, `facades.js`, `geo.js`, `railkey.js` | Sokak evleri: cephe resmine oturan kabartma geometri (cumba, balkon, tente, saçak, baca) |
+| `carsi.js` | Kapalıçarşı'nın içi: nişli dükkânlar, tonoz kaburgaları, askılı lambalar |
 | `kart.js` | Kart fiziği (drift, turbo, duvar), çarpışma kutusu ve görseli |
 | `physics.js` | Çarpışma çözücü: yönlü dikdörtgenler, kütleye göre itme, hız aktarımı |
 | `ai.js` | Rakip sürücüler: sollama, eşya ve özel güç kullanımı |
@@ -92,6 +94,9 @@ Başsız Chromium'da çalışan senaryolar `tools/tests/` altında. Önce `npm r
 node tools/play.mjs tools/tests/collisions.mjs   # üç yarış + sıkışma denemesi: hiçbir gövde iç içe girmemeli
 node tools/play.mjs tools/tests/powers.mjs       # altı özel gücün etkisi, ekran görüntüleriyle
 node tools/play.mjs tools/tests/audio.mjs        # her kart kendi motorunu çalıyor mu, rakipler yönüne göre kayıyor mu
+node tools/play.mjs tools/tests/input.mjs        # gerçek tuş olaylarıyla sürüş, güç tuşu, tuş rehberi
+node tools/play.mjs tools/tests/corridor.mjs     # sürüş koridorunda sahne geometrisi kalmamış olmalı
+node tools/play.mjs tools/tests/screens.mjs --out docs-yeni   # README görüntüleri
 ```
 
 `tools/play.mjs` oyunu açar, senaryonun istediği kadar benzetim ilerletir (`window.__bt.simulate`) ve ekran görüntüsü alır.
