@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { span, ribbon, wall } from './track.js';
 import { A, fit, canvasTex } from './assets.js';
+import { buildCity } from './city.js';
+import { bazaarInterior, vaultY } from './carsi.js';
 
 const SUN_DIR = new THREE.Vector3(-0.914 * 0.82, 0.57, 0.407 * 0.82).normalize();
 export const FOG_COLOR = 0xf3b990;
@@ -44,6 +46,16 @@ export function buildWorld(scene, T, quality = 1) {
     return lerp(baseH(x, z), T.py[n.i] - 0.9, w);
   }
   W.groundH = groundH;
+  // çizilen arazi ağının (kaba üçgenler) yüksekliği — evler buna oturur
+  let grid = null;
+  function meshH(x, z) {
+    const { x0, z0, cell, nx, nz, pos } = grid;
+    const fx = (x - x0) / cell, fz = (z - z0) / cell;
+    const ix = Math.max(0, Math.min(nx - 1, Math.floor(fx))), iz = Math.max(0, Math.min(nz - 1, Math.floor(fz)));
+    const u = fx - ix, v = fz - iz, a = iz * (nx + 1) + ix, b = a + 1, d = a + nx + 1, e = d + 1;
+    const ha = pos[a * 3 + 1], hb = pos[b * 3 + 1], hd = pos[d * 3 + 1], he = pos[e * 3 + 1];
+    return u + v <= 1 ? ha + (hb - ha) * u + (hd - ha) * v : he + (hd - he) * (1 - u) + (hb - he) * (1 - v);
+  }
 
   // ---------- ışık & sis ----------
   scene.fog = new THREE.Fog(FOG_COLOR, 220, 1150);
@@ -146,6 +158,7 @@ export function buildWorld(scene, T, quality = 1) {
     g.setIndex(idx);
     g.computeVertexNormals();
     scene.add(new THREE.Mesh(g, lambert({ vertexColors: true, flatShading: true })));
+    grid = { x0, z0, cell, nx, nz, pos };
   }
 
   // =====================================================================
@@ -289,11 +302,15 @@ export function buildWorld(scene, T, quality = 1) {
     const [i0, i1] = T.ranges.carsi[0];
     const list = span(T, i0, i1);
     const hwv = (i) => T.hw[i];
-    const shop = basic({ map: A.tex.bazaar || null, color: A.tex.bazaar ? 0xfff0dc : 0x9a6b3c });
+    // dükkân duvarları: nişler, kemerler, tonozu bölen taş kemerler (bkz. carsi.js)
+    const shop = basic({ map: A.tex.bazaar || null, color: A.tex.bazaar ? 0xfff0dc : 0x9a6b3c, vertexColors: true });
     const vaultTex = A.tex.vault || null;
     const vault = basic({ map: vaultTex, color: vaultTex ? 0xf2e2c4 : 0xd9b56a, side: THREE.DoubleSide });
-    const walls = [-1, 1].map((s) => wall(T, list, (i) => s * (hwv(i) + 0.3), 0, 7.2, 30, 1));
-    scene.add(new THREE.Mesh(mergeGeometries(walls), shop));
+    const inner = bazaarInterior(T, i0, i1, quality);
+    const im = new THREE.Mesh(inner.geo, shop);
+    im.name = 'carsi-ic';
+    scene.add(im);
+    W.bazaar = { tris: inner.tris };
     // tonoz: beş parçalı kemer kesiti
     const prof = [[-1, 7.2], [-0.66, 9.4], [-0.25, 10.5], [0.25, 10.5], [0.66, 9.4], [1, 7.2]];
     const ceil = [];
@@ -315,17 +332,37 @@ export function buildWorld(scene, T, quality = 1) {
       domes.setMatrixAt(c++, m4.makeTranslation(v.x, v.y, v.z));
     }
     scene.add(domes);
-    // renkli mozaik lambalar
-    const ln = Math.floor(list.length / 3);
-    const lamps = new THREE.InstancedMesh(new THREE.SphereGeometry(0.42, 8, 6).scale(1, 1.35, 1), basic({ color: 0xffffff }), ln);
+    // renkli mozaik lambalar: farklı boy, yükseklik ve derinlikte, zincirle tonoza asılı (hepsi 4,5 m'nin üstünde)
+    const ln = Math.round((list.length - 1) * T.sp / (quality > 0 ? 2.6 : 4.4));
+    // lamba gövdesi: torna profili; doku ortada açık renkli mozaik cam, uçlarda koyu pirinç başlık (örnek rengi camı boyar)
+    const glass = canvasTex(128, 128, (x, w, h) => {
+      x.fillStyle = '#2c2218'; x.fillRect(0, 0, w, h);
+      const rr = rng(11);
+      for (let j = 0; j < 5; j++) for (let i = -1; i < 9; i++) {
+        const cx = (i + (j % 2) * 0.5) * 16, cy = 40 + j * 12, tv = Math.floor(170 + rr() * 85);
+        x.fillStyle = `rgb(${tv},${tv},${tv})`;
+        x.beginPath(); x.moveTo(cx, cy - 11); x.lineTo(cx + 7.4, cy); x.lineTo(cx, cy + 11); x.lineTo(cx - 7.4, cy); x.fill();
+      }
+    });
+    const prof2 = [[0, -0.8], [0.08, -0.62], [0.3, -0.42], [0.44, -0.02], [0.3, 0.38], [0.08, 0.6], [0, 0.8]];
+    const lamps = new THREE.InstancedMesh(new THREE.LatheGeometry(prof2.map((p) => new THREE.Vector2(p[0], p[1])), quality > 0 ? 8 : 6), basic({ map: glass }), ln);
     const cols = [0xff5a3c, 0xffc23c, 0x35d0c0, 0x4f8cff, 0xff6fb1, 0x8be04e];
-    const cc = new THREE.Color();
+    const cc = new THREE.Color(), chain = [], q4 = new THREE.Quaternion(), sc = new THREE.Vector3();
     for (let k = 0; k < ln; k++) {
-      T.pointAt(i0 + k * 3 + 1, (k % 3 - 1) * 3.4, v, 7.3 + (k % 2) * 0.6);
-      lamps.setMatrixAt(k, m4.makeTranslation(v.x, v.y, v.z));
-      lamps.setColorAt(k, cc.setHex(cols[k % cols.length]));
+      let f = i0 + 1.5 + ((k + 0.5) / ln) * (list.length - 4);
+      // enine kemerlerin içine denk gelmesin
+      for (const rd of inner.ribs) if (Math.abs(f * T.sp - rd) < 0.9) f += 1.0 / T.sp;
+      const lat = (hash2(k, 5.3) * 2 - 1) * 5.4, size = 0.75 + hash2(k, 1.7) * 0.6, y = 5.85 + hash2(k, 9.1) * 2.2;
+      T.pointAt(f, lat, v, y);
+      lamps.setMatrixAt(k, m4.compose(v, q4, sc.setScalar(size)));
+      lamps.setColorAt(k, cc.setHex(cols[(k * 5 + (k >> 2)) % cols.length]));
+      chain.push(v.x, v.y + 0.8 * size, v.z, v.x, T.py[T.wrap(Math.floor(f))] + vaultY(Math.abs(lat) / (T.hw[T.wrap(Math.floor(f))] + 0.3)), v.z);
     }
+    lamps.name = 'carsi-lamba';
     scene.add(lamps);
+    const cg = new THREE.BufferGeometry();
+    cg.setAttribute('position', new THREE.Float32BufferAttribute(chain, 3));
+    scene.add(new THREE.LineSegments(cg, new THREE.LineBasicMaterial({ color: 0x5a4424 })));
     // giriş ve çıkış kapıları
     const sign = canvasTex(1024, 256, (x, w, h) => {
       const g = x.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#1d5c4a'); g.addColorStop(1, '#134236');
@@ -578,10 +615,11 @@ export function buildWorld(scene, T, quality = 1) {
 
   // =====================================================================
   function buildBuildings() {
-    const wallsA = [], wallsB = [], roofs = [];
+    // yerleşim burada, geometri city.js'te: her ev resmine oturan kabartmalı ayrı bir hacim
+    const lots = [];
     const footprints = (W.footprints = []);
     const D = 9;
-    const defs = { a: { H: 13.5, hw: 6.0, roof: 0xb9553f }, b: { H: 17, hw: 7.5, roof: 0x8a6f63 } };
+    const defs = { a: { H: 13.5, hw: 6.0 }, b: { H: 17, hw: 7.5 } };
     const r = rng(42);
     const stretches = [
       [27, 3, -1, 'a'], [3, 4, -1, 'b'], [3, 4, 1, 'a'],
@@ -593,7 +631,7 @@ export function buildWorld(scene, T, quality = 1) {
       const i0 = T.cpIdx[ca], n = (T.cpIdx[cb] - i0 + T.N) % T.N;
       let j = 4;
       while (j < n - 4) {
-        const def = defs[r() > 0.3 ? kind : kind === 'a' ? 'b' : 'a'];
+        const dk = r() > 0.3 ? kind : kind === 'a' ? 'b' : 'a', def = defs[dk];
         const nh = 2 + Math.floor(r() * 3), L = nh * def.hw;
         const i = T.wrap(i0 + j + Math.round(L / 2 / T.sp));
         j += Math.round(L / T.sp) + 2 + Math.floor(r() * 3);
@@ -605,11 +643,8 @@ export function buildWorld(scene, T, quality = 1) {
         if (T.nearest(cx, cz).d < off - 1.5) continue;
         if (W.keepOut.some((k) => Math.hypot(cx - k.x, cz - k.z) < k.r + L / 2)) continue;
         if (footprints.some((f) => Math.hypot(cx - f.x, cz - f.z) < f.r + L / 2 - 1)) continue;
-        const yaw = T.headingAt(i);
-        const y0 = groundH(cx, cz) - 2.5, H = def.H * (0.92 + r() * 0.16);
-        const k0 = Math.floor(r() * (5 - nh));
-        addHouse(def === defs.a ? wallsA : wallsB, cx, y0, cz, yaw, L, D, H + 2.5, k0 / 4, (k0 + nh) / 4, 2.5 / (H + 2.5), side);
-        addRoof(cx, y0 + H + 2.5, cz, yaw, L, D, def.roof);
+        const H = def.H * (0.92 + r() * 0.16), k0 = Math.floor(r() * (5 - nh));
+        lots.push({ x: cx, z: cz, yaw: T.headingAt(i), side, kind: dk, nh, k0, H, street: true });
         footprints.push({ x: cx, z: cz, r: L / 2 });
       }
     }
@@ -623,68 +658,19 @@ export function buildWorld(scene, T, quality = 1) {
       const n = T.nearest(x, z);
       if (n.d < T.hw[n.i] + 27 || n.d > 135) continue;
       if (r2() < smooth(30, 135, n.d) * 0.75) continue;
-      const def = defs[r2() > 0.5 ? 'a' : 'b'];
+      const dk = r2() > 0.5 ? 'a' : 'b', def = defs[dk];
       const nh = 2 + Math.floor(r2() * 3), L = nh * def.hw;
       if (W.keepOut.some((k) => Math.hypot(x - k.x, z - k.z) < k.r + L / 2)) continue;
       if (footprints.some((f) => Math.hypot(x - f.x, z - f.z) < f.r + L / 2 + 2.5)) continue;
       const yaw = T.headingAt(n.i) + (r2() > 0.6 ? Math.PI / 2 : 0);
-      const y0 = groundH(x, z) - 3, H = def.H * (0.85 + r2() * 0.3), k0 = Math.floor(r2() * (5 - nh));
-      addHouse(def === defs.a ? wallsA : wallsB, x, y0, z, yaw, L, D, H + 3, k0 / 4, (k0 + nh) / 4, 0, -1);
-      addRoof(x, y0 + H + 3, z, yaw, L, D, def.roof);
+      const H = def.H * (0.85 + r2() * 0.3), k0 = Math.floor(r2() * (5 - nh));
+      // ön yüz, en yakın pist noktasına bakan uzun kenar
+      const side = (x - T.px[n.i]) * -Math.cos(yaw) + (z - T.pz[n.i]) * Math.sin(yaw) > 0 ? 1 : -1;
+      lots.push({ x, z, yaw, side, kind: dk, nh, k0, H, street: false });
       footprints.push({ x, z, r: L / 2 });
       placed++;
     }
-    if (wallsA.length) scene.add(new THREE.Mesh(quadGeo(wallsA), lambert({ map: A.tex.facade_a || null, color: A.tex.facade_a ? 0xffffff : 0xe8a27c })));
-    if (wallsB.length) scene.add(new THREE.Mesh(quadGeo(wallsB), lambert({ map: A.tex.facade_b || null, color: A.tex.facade_b ? 0xffffff : 0xb9c7b0 })));
-    if (roofs.length) scene.add(new THREE.Mesh(mergeGeometries(roofs), lambert({ vertexColors: true })));
-
-    // yerel (along, depth) eksenlerinde dört cephe
-    function addHouse(out, cx, y0, cz, yaw, L, Dp, H, u0, u1, vCut, side) {
-      const ax = Math.sin(yaw), az = Math.cos(yaw); // pist boyunca
-      const bx = -az * -1, bz = ax * -1; // sağ = (−az... ) işaret aşağıda side ile düzeltilir
-      const rx_ = -az, rz_ = ax; // sağ vektör
-      const P = (a, b, y) => [cx + ax * a + rx_ * b, y, cz + az * a + rz_ * b];
-      const hl = L / 2, hd = Dp / 2, y1 = y0 + H;
-      const v0 = -vCut * 0.0; // zemin altı kısım dokunun altını uzatır
-      // yola bakan yüz: side=-1 (solda) ise yol sağda → b=+hd
-      const f = side < 0 ? 1 : -1;
-      const quad = (p0, p1, ua, ub) => out.push({ p: [P(p0[0], p0[1], y0), P(p1[0], p1[1], y0), P(p1[0], p1[1], y1), P(p0[0], p0[1], y1)], uv: [ua, v0, ub, v0, ub, 1, ua, 1] });
-      const uw = (u1 - u0) / Math.max(1, Math.round((u1 - u0) * 4));
-      quad([-hl * f, hd * f], [hl * f, hd * f], u0, u1);       // ön
-      quad([hl * f, -hd * f], [-hl * f, -hd * f], u0, u1);     // arka
-      quad([hl * f, hd * f], [hl * f, -hd * f], u0, u0 + uw);  // yan
-      quad([-hl * f, -hd * f], [-hl * f, hd * f], u1 - uw, u1);// yan
-      void bx; void bz;
-    }
-    function quadGeo(quads) {
-      const pos = [], uv = [], idx = [];
-      quads.forEach((q, k) => {
-        for (const p of q.p) pos.push(...p);
-        uv.push(...q.uv);
-        const a = k * 4; idx.push(a, a + 1, a + 2, a, a + 2, a + 3);
-      });
-      const g = new THREE.BufferGeometry();
-      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-      g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-      g.setIndex(idx);
-      g.computeVertexNormals();
-      return g;
-    }
-    function addRoof(cx, y, cz, yaw, L, Dp, color) {
-      const hl = L / 2 + 0.5, hd = Dp / 2 + 0.6, rh = 3.2;
-      // beşik çatı: uzun eksen boyunca mahya
-      const p = [[-hl, 0, -hd], [hl, 0, -hd], [hl, 0, hd], [-hl, 0, hd], [-hl, rh, 0], [hl, rh, 0]];
-      const tri = [[0, 4, 5], [0, 5, 1], [3, 2, 5], [3, 5, 4], [0, 3, 4], [1, 5, 2]];
-      const pos = [], col = [];
-      const c = new THREE.Color(color);
-      tri.forEach((t, ti) => { const sh = ti < 2 ? 1 : ti < 4 ? 0.86 : 0.75; for (const vi of t) { pos.push(...p[vi]); col.push(c.r * sh, c.g * sh, c.b * sh); } });
-      const g = new THREE.BufferGeometry();
-      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-      g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-      g.computeVertexNormals();
-      g.applyMatrix4(new THREE.Matrix4().makeRotationY(yaw - Math.PI / 2).setPosition(cx, y, cz));
-      roofs.push(g);
-    }
+    W.city = buildCity(scene, lots, quality, meshH);
   }
 
   // =====================================================================
