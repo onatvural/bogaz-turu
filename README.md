@@ -2,7 +2,7 @@
 
 İstanbul'da geçen, three.js ile yazılmış bir kart yarışı. Eminönü sahilinden kalk, Kapalıçarşı'nın içinden geç, Galata yokuşunda nostaljik tramvayı solla, Boğaz Köprüsü'nden Anadolu'ya geç, sahil yolundan inip balıkçıların arasından Galata Köprüsü'yle geri dön. Üç tur, altı yarışçı.
 
-**Oyna: https://bogaz-turu.vercel.app**
+**Oyna: https://bogaz-turu.betaspacestudio.com**
 
 ![Boğaz Köprüsü](docs/kopru.jpeg)
 
